@@ -4,9 +4,9 @@ An automated **4-DOF Pick-and-Place Color-Sorting Robotic Arm** controlled by an
 
 ## 3D Model Preview
 
-[![3D Model Preview](3d%20Model.png)](3d%20Model.stl)
+![3D Model 360 Preview](3d_Model_Preview.gif)
 
-> Click the preview image above to open GitHub's interactive 3D viewer for [`3d Model.stl`](3d%20Model.stl).
+*360° animated preview of [`3d Model.stl`](3d%20Model.stl) (parametric OpenSCAD source: [`3d Model.scad`](3d%20Model.scad)).*
 
 ## Circuit Schematic
 
@@ -39,7 +39,7 @@ As shown in the Fritzing wiring diagram ([`Schematics.png`](Schematics.png)):
 
 ## 3D Model & Physical Layout
 
-The complete mechanical layout and printable parts are provided in [`3d Model.stl`](3d%20Model.stl).
+The complete mechanical layout and printable parts are provided in [`3d Model.stl`](3d%20Model.stl) and its parametric OpenSCAD source [`3d Model.scad`](3d%20Model.scad).
 
 ### Robotic Arm Link Dimensions
 - **Base height (`L1`)**: `64.50 mm` (surface to Joint 2 pivot)
@@ -94,5 +94,7 @@ The firmware in [`Pick_and_Place_Color_Sorting_Object_RobotArm.ino`](Pick_and_Pl
 - [`Pick_and_Place_Color_Sorting_Object_RobotArm.ino`](Pick_and_Place_Color_Sorting_Object_RobotArm.ino) — Complete Arduino UNO R3 controller sketch
 - [`Schematics.png`](Schematics.png) — Fritzing circuit wiring diagram
 - [`3d Model.stl`](3d%20Model.stl) — 3D assembly model (base board, arm mounts, sensor mount, pickup & sorting baskets)
-- [`3d Model.png`](3d%20Model.png) — 3D model preview render
+- [`3d Model.scad`](3d%20Model.scad) — OpenSCAD parametric 3D source file
+- [`3d_Model_Preview.gif`](3d_Model_Preview.gif) — 360° rotating 3D model preview animation
+- [`3d Model.png`](3d%20Model.png) — Static 3D model preview render
 - [`README.md`](README.md) — Project documentation, pinout, and kinematics reference
