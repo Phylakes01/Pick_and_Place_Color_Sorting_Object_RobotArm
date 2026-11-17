@@ -2,7 +2,11 @@
 
 An automated **4-DOF Pick-and-Place Color-Sorting Robotic Arm** controlled by an **Arduino UNO R3**. The system detects when an object enters the pickup zone using an **HC-SR04 ultrasonic sensor**, identifies its color (**Blue**, **Green**, or **Red**) using a **TCS34725 I2C RGB color sensor**, and smoothly drives a **5-servo robotic arm and gripper** using geometric **Inverse Kinematics (IK)** to place the object into its matching sorting bin.
 
----
+## 3D Model Preview
+
+[![3D Model Preview](3d%20Model.png)](3d%20Model.stl)
+
+> Click the preview image above to open GitHub's interactive 3D viewer for [`3d Model.stl`](3d%20Model.stl).
 
 ## Circuit Schematic
 
@@ -90,4 +94,5 @@ The firmware in [`Pick_and_Place_Color_Sorting_Object_RobotArm.ino`](Pick_and_Pl
 - [`Pick_and_Place_Color_Sorting_Object_RobotArm.ino`](Pick_and_Place_Color_Sorting_Object_RobotArm.ino) — Complete Arduino UNO R3 controller sketch
 - [`Schematics.png`](Schematics.png) — Fritzing circuit wiring diagram
 - [`3d Model.stl`](3d%20Model.stl) — 3D assembly model (base board, arm mounts, sensor mount, pickup & sorting baskets)
+- [`3d Model.png`](3d%20Model.png) — 3D model preview render
 - [`README.md`](README.md) — Project documentation, pinout, and kinematics reference
