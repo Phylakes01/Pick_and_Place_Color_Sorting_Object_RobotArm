@@ -2,71 +2,66 @@
  * @file Pick_and_Place_Color_Sorting_Object_RobotArm.ino
  * @brief 6-Servo Pick-and-Place Color-Sorting Robotic Arm controller for Arduino UNO.
  *
- * Verified Physical Setup (from hardware photos, sweep video, & Base_And_Gripper_Sweep_Test.ino):
- * - 6 Servos on Pins { 9, 5, 10, 6, 11, 3 }:
- *   - Pin 9  (servos[0]): Base Rotation (15 deg to 150 deg, 45 deg spacing per container)
- *   - Pin 5  (servos[1]): Lower Shoulder (held at calibrated 150 deg)
- *   - Pin 10 (servos[2]): Upper Shoulder / Elbow (held at calibrated 25 deg)
- *   - Pin 6  (servos[3]): Wrist Pitch (held at calibrated 35 deg)
- *   - Pin 11 (servos[4]): Wrist Roll (held at calibrated 35 deg)
- *   - Pin 3  (servos[5]): Gripper Claw (35 = open, 140 = close, 105 = standby)
+ * Servo Pin Mapping:
+ * - Pin 9  (servos[0]): Base Rotation
+ * - Pin 5  (servos[1]): Shoulder
+ * - Pin 10 (servos[2]): Elbow
+ * - Pin 6  (servos[3]): Wrist Pitch
+ * - Pin 11 (servos[4]): Wrist Roll
+ * - Pin 3  (servos[5]): Gripper Claw (35 = open, 180 = closed)
  *
- * Verified Container Base Angles (45 deg equal spacing):
- * - Far Sorting Bin (Green Bin)    : Base = 15 deg
- * - Middle Sorting Bin (Blue Bin)  : Base = 60 deg
- * - Near Sorting Bin (Red Bin)     : Base = 105 deg
- * - Side Pickup Container          : Base = 150 deg
- *
- * System Sequence:
- * 1. Detects object in pickup zone with HC-SR04 ultrasonic sensor (<= 10.0 cm).
- * 2. Waits briefly for object to settle, then analyzes color with TCS34725 I2C sensor.
- * 3. Smoothly rotates Base (Pin 9) to Pickup (150 deg), opens/closes Gripper (Pin 3),
- *    rotates to the matching Color Bin (15 / 60 / 105 deg), drops the object, and
- *    smoothly returns to Home Pose (60 deg).
+ * Calibrated Station Poses { Base, Shoulder, Elbow, WristPitch, WristRoll, Gripper }:
+ * - PICKUP_POSE       : { 145, 145, 0, 100, 35, 180 }  (Side Pickup Container)
+ * - LEFT_BUCKET_POSE  : { 100, 125, 0,  55, 35, 180 }  (Left Bucket  -> Green)
+ * - MID_BUCKET_POSE   : {  55, 145, 0, 100, 35, 180 }  (Mid Bucket   -> Blue)
+ * - RIGHT_BUCKET_POSE : {  15, 135, 0,  70, 20, 180 }  (Right Bucket -> Red)
  *
  * Serial Monitor Commands (9600 baud):
- * - 'g' : Test Pick & Place to Green Bin (15 deg)
- * - 'b' : Test Pick & Place to Blue Bin (60 deg)
- * - 'r' : Test Pick & Place to Red Bin (105 deg)
- * - 'h' : Return smoothly to Home Pose (60 deg)
- * - 's' : Pause / Resume automatic ultrasonic + color sorting
- * - 'f' : Fast base rotation (10 ms per degree)
- * - 'n' : Normal base rotation (20 ms per degree)
+ * - 'm' or 'b' : Test Pick & Place -> Mid Bucket / Blue (Base 55 deg)
+ * - 'l' or 'g' : Test Pick & Place -> Left Bucket / Green (Base 100 deg)
+ * - 'r'        : Test Pick & Place -> Right Bucket / Red (Base 15 deg)
+ * - 'p' or 'h' : Return smoothly to Pickup / Base Pose (Base 145 deg, Gripper Open)
+ * - 's'        : Pause / Resume automatic ultrasonic + color sorting
+ * - 'f'        : Fast servo speed (10 ms per degree)
+ * - 'n'        : Normal servo speed (20 ms per degree)
  */
 
 #include <Wire.h>
 #include <Servo.h>
 
 // ============================================================================
-// 1. HARDWARE PINS, VIDEO-VERIFIED ANGLES, & SENSOR CONSTANTS
+// 1. HARDWARE PINS, CALIBRATED POSES, & SENSOR CONSTANTS
 // ============================================================================
 
 // --- 6 Robotic Arm Servo Pins ---
 const uint8_t NUM_SERVOS = 6;
 const uint8_t servoPins[NUM_SERVOS] = {
   9,   // [0] Base Rotation (Pin 9)
-  5,   // [1] Lower Shoulder (Pin 5)
-  10,  // [2] Upper Shoulder / Elbow (Pin 10)
+  5,   // [1] Shoulder (Pin 5)
+  10,  // [2] Elbow (Pin 10)
   6,   // [3] Wrist Pitch (Pin 6)
   11,  // [4] Wrist Roll (Pin 11)
   3    // [5] Gripper Claw (Pin 3)
 };
 
-// --- Exact Tested Home / Stand Pose: { Base, Servo2, Servo3, Servo4, Servo5, Gripper } ---
-const int STAND_POSE[NUM_SERVOS] = { 60, 150, 25, 35, 35, 105 };
+// --- Exact Calibrated 6-Servo Poses: { Base, Shoulder, Elbow, WristPitch, WristRoll, Gripper } ---
+const int PICKUP_POSE[NUM_SERVOS]       = { 145, 145, 0, 100, 35, 180 };  // Side Pickup Container
+const int MID_BUCKET_POSE[NUM_SERVOS]   = {  55, 145, 0, 100, 35, 180 };  // Mid Bucket  (Blue)
+const int LEFT_BUCKET_POSE[NUM_SERVOS]  = { 100, 125, 0,  55, 35, 180 };  // Left Bucket (Green)
+const int RIGHT_BUCKET_POSE[NUM_SERVOS] = {  15, 135, 0,  70, 20, 180 };  // Right Bucket (Red)
 
-// --- Exact Container Base Angles (degrees, 45 deg spacing verified from video) ---
-const int GREEN_BIN_BASE_ANGLE = 15;   // Far front sorting bin (Green)
-const int BLUE_BIN_BASE_ANGLE  = 60;   // Middle front sorting bin (Blue)
-const int RED_BIN_BASE_ANGLE   = 105;  // Near front sorting bin (Red)
-const int PICKUP_BASE_ANGLE    = 150;  // Side pickup container
+// --- High-Clearance Travel Upper-Arm Posture (used while Base rotates between stations) ---
+const int CLEARANCE_SHOULDER    = 145;
+const int CLEARANCE_ELBOW       = 0;
+const int CLEARANCE_WRIST_PITCH = 100;
+const int CLEARANCE_WRIST_ROLL  = 35;
 
-// --- Gripper Open / Close / Standby Angles (Pin 3) ---
-const int GRIP_FULL_OPEN  = 35;   // Wide open claw
-const int GRIP_FULL_CLOSE = 140;  // Closed claw holding object
-const int GRIP_STANDBY    = 105;  // Idle standby angle
+// --- Gripper Angles (Pin 3) ---
+const int GRIP_FULL_OPEN  = 35;   // Open claw to release or prepare to grab
+const int GRIP_FULL_CLOSE = 180;  // Closed claw holding object (matches calibrated poses)
+const int GRIP_STANDBY    = 35;   // Open at pickup standby so arm is ready to grab
 
-// --- Base Rotation Speed & Auto-Sort Toggle ---
+// --- Motion Speed & Auto-Sort Toggle ---
 int stepDelayMs = 20;   // 20 ms per degree (normal), 10 ms per degree (fast)
 bool isRunning = true;  // Automatic ultrasonic + color sorting active
 
@@ -117,9 +112,9 @@ struct ColorReading {
   int blue;
 };
 
-// --- Servo Objects & State ---
+// --- Servo Objects & Live Tracked Angles ---
 Servo servos[NUM_SERVOS];
-int currentBase = STAND_POSE[0];
+int currentAngles[NUM_SERVOS] = { 145, 145, 0, 100, 35, GRIP_STANDBY };
 
 // Explicit prototypes for functions using custom types
 ColorReading readColors();
@@ -302,72 +297,115 @@ void printColorReading(const ColorReading& reading) {
 
 
 // ============================================================================
-// 4. 6-SERVO MOTION & PICK-AND-PLACE SEQUENCE
+// 4. 6-SERVO MOTION & CALIBRATED PICK-AND-PLACE SEQUENCE
 // ============================================================================
 
 /**
- * @brief Smoothly rotates the Base Servo (Pin 9) 1 degree at a time to targetAngle.
+ * @brief Smoothly rotates one servo (index 0..5) 1 degree per step to targetAngle.
  */
-void moveBaseSmooth(int targetAngle) {
+void moveJointSmooth(uint8_t idx, int targetAngle) {
+  if (idx >= NUM_SERVOS) {
+    return;
+  }
+
   targetAngle = constrain(targetAngle, 0, 180);
-  if (currentBase < targetAngle) {
-    for (int a = currentBase; a <= targetAngle; a++) {
-      servos[0].write(a);
-      delay(stepDelayMs);
+  while (currentAngles[idx] != targetAngle) {
+    if (currentAngles[idx] < targetAngle) {
+      currentAngles[idx]++;
+    } else {
+      currentAngles[idx]--;
     }
-  } else if (currentBase > targetAngle) {
-    for (int a = currentBase; a >= targetAngle; a--) {
-      servos[0].write(a);
-      delay(stepDelayMs);
-    }
-  }
-  currentBase = targetAngle;
-}
-
-/**
- * @brief Ensures upper arm joints (Servos 2..5) remain at the verified STAND_POSE angles.
- */
-void holdStandArmPose() {
-  for (uint8_t i = 1; i < 5; i++) {
-    servos[i].write(STAND_POSE[i]);
+    servos[idx].write(currentAngles[idx]);
+    delay(stepDelayMs);
   }
 }
 
 /**
- * @brief Runs a smooth Pick-and-Place cycle while keeping Servos 2..5 at STAND_POSE:
- *        Pickup (150 deg) -> Target Bin (15 / 60 / 105 deg) -> Home (60 deg).
+ * @brief Smoothly moves upper arm joints (Shoulder, Elbow, WristPitch, WristRoll)
+ *        1 degree per tick while keeping Base and Gripper unchanged.
  */
-void executePickAndPlace(int targetBinBaseAngle, const char* colorName) {
-  Serial.print(">>> Sorting ");
-  Serial.print(colorName);
-  Serial.print(" object -> Bin Base Angle = ");
-  Serial.println(targetBinBaseAngle);
+void moveUpperArmSmooth(int targetS2, int targetS3, int targetS4, int targetS5) {
+  int targets[4] = {
+    constrain(targetS2, 0, 180),
+    constrain(targetS3, 0, 180),
+    constrain(targetS4, 0, 180),
+    constrain(targetS5, 0, 180)
+  };
 
-  holdStandArmPose();
+  bool moving = true;
+  while (moving) {
+    moving = false;
+    for (uint8_t k = 0; k < 4; k++) {
+      uint8_t idx = k + 1;  // servos[1..4]
+      if (currentAngles[idx] < targets[k]) {
+        currentAngles[idx]++;
+        servos[idx].write(currentAngles[idx]);
+        moving = true;
+      } else if (currentAngles[idx] > targets[k]) {
+        currentAngles[idx]--;
+        servos[idx].write(currentAngles[idx]);
+        moving = true;
+      }
+    }
+    if (moving) {
+      delay(stepDelayMs);
+    }
+  }
+}
 
-  // 1. Rotate Base smoothly to Side Pickup Container (150 deg) and open Gripper
-  servos[5].write(GRIP_FULL_OPEN);
-  moveBaseSmooth(PICKUP_BASE_ANGLE);
-  delay(400);
+/**
+ * @brief Smoothly moves to targetPose[0..4] safely via the high-clearance travel posture:
+ *        1) Lift upper arm to clearance posture (145, 0, 100, 35)
+ *        2) Rotate Base (Pin 9) to targetPose[0]
+ *        3) Lower/tilt upper arm to targetPose[1..4]
+ */
+void moveToPoseSmooth(const int targetPose[NUM_SERVOS]) {
+  moveUpperArmSmooth(CLEARANCE_SHOULDER, CLEARANCE_ELBOW, CLEARANCE_WRIST_PITCH, CLEARANCE_WRIST_ROLL);
+  moveJointSmooth(0, targetPose[0]);
+  moveUpperArmSmooth(targetPose[1], targetPose[2], targetPose[3], targetPose[4]);
+}
 
-  // 2. Close Gripper (Pin 3) to grab the object from the side pickup container
-  servos[5].write(GRIP_FULL_CLOSE);
-  delay(400);
+/**
+ * @brief Sets the gripper claw (Pin 3) and waits briefly for jaw travel.
+ */
+void setGripper(int angle, unsigned long settleMs = 400) {
+  angle = constrain(angle, 0, 180);
+  currentAngles[5] = angle;
+  servos[5].write(angle);
+  delay(settleMs);
+}
 
-  // 3. Rotate Base smoothly to the designated Color Bin (15, 60, or 105 deg)
-  moveBaseSmooth(targetBinBaseAngle);
+/**
+ * @brief Runs a complete calibrated Pick-and-Place cycle:
+ *        Pickup Pose (145) -> Target Bucket Pose (55 / 100 / 15) -> Pickup Standby Pose (145).
+ */
+void executePickAndPlace(const int targetBucketPose[NUM_SERVOS], const char* bucketName) {
+  Serial.print(">>> Sorting -> ");
+  Serial.print(bucketName);
+  Serial.print(" (Base = ");
+  Serial.print(targetBucketPose[0]);
+  Serial.println(" deg)");
+
+  // 1. Ensure arm is at Pickup Pose (145, 145, 0, 100, 35) with Gripper OPEN (35)
+  moveToPoseSmooth(PICKUP_POSE);
+  setGripper(GRIP_FULL_OPEN, 300);
+
+  // 2. Close Gripper (180 deg) to grab the object
+  setGripper(GRIP_FULL_CLOSE, 400);
+
+  // 3. Move smoothly to Target Bucket Pose (lift -> rotate base -> dip to bucket pose)
+  moveToPoseSmooth(targetBucketPose);
   delay(300);
 
-  // 4. Open Gripper (Pin 3) to release the object into the bin
-  servos[5].write(GRIP_FULL_OPEN);
-  delay(400);
+  // 4. Open Gripper (35 deg) to release the object into the bucket
+  setGripper(GRIP_FULL_OPEN, 400);
 
-  // 5. Return Base smoothly to Home Pose (60 deg) and set Gripper to standby
-  moveBaseSmooth(STAND_POSE[0]);
-  servos[5].write(GRIP_STANDBY);
-  delay(200);
+  // 5. Retract upper arm to clearance posture, then smoothly return to Pickup Standby Pose
+  moveUpperArmSmooth(CLEARANCE_SHOULDER, CLEARANCE_ELBOW, CLEARANCE_WRIST_PITCH, CLEARANCE_WRIST_ROLL);
+  moveToPoseSmooth(PICKUP_POSE);
+  setGripper(GRIP_STANDBY, 200);
 
-  Serial.println(">>> Cycle complete! Returned to Home Pose (60 deg).");
+  Serial.println(">>> Cycle complete! Returned to Pickup Standby Pose (Base 145, Gripper Open).");
 }
 
 
@@ -378,17 +416,16 @@ void executePickAndPlace(int targetBinBaseAngle, const char* colorName) {
 void handleSerialCommands() {
   while (Serial.available() > 0) {
     char c = Serial.read();
-    if (c == 'g' || c == 'G') {
-      executePickAndPlace(GREEN_BIN_BASE_ANGLE, "GREEN (Manual Test)");
-    } else if (c == 'b' || c == 'B') {
-      executePickAndPlace(BLUE_BIN_BASE_ANGLE, "BLUE (Manual Test)");
+    if (c == 'm' || c == 'M' || c == 'b' || c == 'B') {
+      executePickAndPlace(MID_BUCKET_POSE, "MID BUCKET / BLUE (Manual Test)");
+    } else if (c == 'l' || c == 'L' || c == 'g' || c == 'G') {
+      executePickAndPlace(LEFT_BUCKET_POSE, "LEFT BUCKET / GREEN (Manual Test)");
     } else if (c == 'r' || c == 'R') {
-      executePickAndPlace(RED_BIN_BASE_ANGLE, "RED (Manual Test)");
-    } else if (c == 'h' || c == 'H') {
-      Serial.println(">>> Returning smoothly to Home Pose (60 deg)...");
-      holdStandArmPose();
-      moveBaseSmooth(STAND_POSE[0]);
-      servos[5].write(GRIP_STANDBY);
+      executePickAndPlace(RIGHT_BUCKET_POSE, "RIGHT BUCKET / RED (Manual Test)");
+    } else if (c == 'p' || c == 'P' || c == 'h' || c == 'H') {
+      Serial.println(">>> Returning smoothly to Pickup / Base Pose (145 deg, Gripper Open)...");
+      moveToPoseSmooth(PICKUP_POSE);
+      setGripper(GRIP_STANDBY, 200);
     } else if (c == 's' || c == 'S') {
       isRunning = !isRunning;
       Serial.println(isRunning ? ">>> Auto Sorting: ON" : ">>> Auto Sorting: PAUSED");
@@ -404,21 +441,23 @@ void handleSerialCommands() {
 
 void setup() {
   Serial.begin(9600);
-  Serial.println("Pinapatayo ang 6-Servo Arm (STAND_POSE)...");
+  Serial.println("Starting 6-Servo Arm at calibrated Pickup / Base Pose...");
 
   initUltrasonic();
   initColorSensor();
 
-  // Paisa-isang i-attach ang lahat ng 6 servos (800 ms pagitan iwas brownout)
+  // Attach all 6 servos one-by-one (800 ms gap to prevent power brownout)
+  // Gripper starts OPEN (GRIP_STANDBY = 35 deg) ready to receive an object
   for (uint8_t i = 0; i < NUM_SERVOS; i++) {
-    servos[i].write(STAND_POSE[i]);
+    int initAngle = (i == 5) ? GRIP_STANDBY : PICKUP_POSE[i];
+    currentAngles[i] = initAngle;
+    servos[i].write(initAngle);
     servos[i].attach(servoPins[i]);
     delay(800);
   }
-  currentBase = STAND_POSE[0];
 
-  Serial.println("Ready! Angles: Green=15, Blue=60, Red=105, Pickup=150");
-  Serial.println("Commands: 'g'=Green(15), 'b'=Blue(60), 'r'=Red(105), 'h'=Home(60), 's'=Pause/Resume, 'f'=Fast, 'n'=Normal");
+  Serial.println("Ready at Pickup Pose {145, 145, 0, 100, 35, Open=35}!");
+  Serial.println("Commands: 'm'/'b'=Mid/Blue(55), 'l'/'g'=Left/Green(100), 'r'=Right/Red(15), 'p'/'h'=Pickup(145), 's'=Pause, 'f'=Fast, 'n'=Normal");
 }
 
 void loop() {
@@ -436,28 +475,28 @@ void loop() {
     return;
   }
 
-  // 2. Wait briefly for object to settle, then re-confirm distance
+  // 2. Wait briefly for object to settle in pickup zone, then re-confirm distance
   delay(SETTLE_DELAY_MS);
   distanceCm = readStableDistanceCm();
   if (distanceCm > DETECTION_DISTANCE_CM) {
     return;
   }
 
-  // 3. Analyze object color with TCS34725 and sort into designated bin
+  // 3. Analyze object color with TCS34725 and sort into calibrated bucket pose
   ColorReading rgb = readColorsAveraged(3);
   printColorReading(rgb);
 
   switch (detectColor(rgb)) {
-    case COLOR_GREEN:
-      executePickAndPlace(GREEN_BIN_BASE_ANGLE, "GREEN");
+    case COLOR_BLUE:
+      executePickAndPlace(MID_BUCKET_POSE, "BLUE -> MID BUCKET");
       break;
 
-    case COLOR_BLUE:
-      executePickAndPlace(BLUE_BIN_BASE_ANGLE, "BLUE");
+    case COLOR_GREEN:
+      executePickAndPlace(LEFT_BUCKET_POSE, "GREEN -> LEFT BUCKET");
       break;
 
     case COLOR_RED:
-      executePickAndPlace(RED_BIN_BASE_ANGLE, "RED");
+      executePickAndPlace(RIGHT_BUCKET_POSE, "RED -> RIGHT BUCKET");
       break;
 
     case COLOR_NONE:
