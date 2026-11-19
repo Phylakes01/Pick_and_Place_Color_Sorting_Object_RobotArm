@@ -1,6 +1,6 @@
 /**
  * @file Pick_and_Place_Color_Sorting_Object_RobotArm.ino
- * @brief 6-Servo Pick-and-Place Color-Sorting Robotic Arm controller for Arduino UNO.
+ * @brief 6-Servo Pick-and-Place 9-Color-Sorting Robotic Arm controller for Arduino UNO.
  *
  * Servo Pin Mapping:
  * - Pin 9  (servos[0]): Base Rotation
@@ -13,9 +13,15 @@
  * Exact Calibrated 6-Servo Poses { Base, Shoulder, Elbow, WristPitch, WristRoll, Gripper }:
  * - BASE_POSE         : { 145, 145,  0, 100, 35, 180 }  (Base Angle / Elevated Standby Hover)
  * - PICKUP_POSE       : { 140, 120, 15,  75, 35,  35 }  (Pickup Location Pose, Open Claw)
- * - MID_BUCKET_POSE   : {  55, 145,  0, 100, 35, 180 }  (Mid Bucket   -> Blue)
- * - LEFT_BUCKET_POSE  : { 100, 125,  0,  55, 35, 180 }  (Left Bucket  -> Green)
- * - RIGHT_BUCKET_POSE : {  15, 135,  0,  70, 20, 180 }  (Right Bucket -> Red)
+ * - MID_BUCKET_POSE   : {  55, 145,  0, 100, 35, 180 }  (Mid Bucket   -> Blue / Purple / White)
+ * - LEFT_BUCKET_POSE  : { 100, 125,  0,  55, 35, 180 }  (Left Bucket  -> Green / Yellow / Cyan)
+ * - RIGHT_BUCKET_POSE : {  15, 135,  0,  70, 20, 180 }  (Right Bucket -> Red / Orange / Magenta)
+ *
+ * TCS34725 Full-Spectrum 9-Color Classification (RGB + HSV Hue/Saturation):
+ * - Right Bucket (Base  15 deg, Red / Warm Family)        : RED, ORANGE, MAGENTA
+ * - Left Bucket  (Base 100 deg, Green / Yellow / Cyan)    : GREEN, YELLOW, CYAN
+ * - Mid Bucket   (Base  55 deg, Blue / Purple / White)    : BLUE, PURPLE, WHITE
+ * - Ignored      (COLOR_NONE)                             : Dark (C < 50) or low-reflectance neutral (C < 450, spread < 6)
  *
  * Serial Monitor Commands (9600 baud):
  * - '1'        : Move smoothly to BASE_POSE         { 145, 145,  0, 100, 35, 180 }
@@ -23,9 +29,9 @@
  * - '3'        : Move smoothly to MID_BUCKET_POSE   {  55, 145,  0, 100, 35, 180 }
  * - '4'        : Move smoothly to LEFT_BUCKET_POSE  { 100, 125,  0,  55, 35, 180 }
  * - '5'        : Move smoothly to RIGHT_BUCKET_POSE {  15, 135,  0,  70, 20, 180 }
- * - 'm' or 'b' : Test Pick & Place -> Mid Bucket / Blue (Base 55 deg)
- * - 'l' or 'g' : Test Pick & Place -> Left Bucket / Green (Base 100 deg)
- * - 'r'        : Test Pick & Place -> Right Bucket / Red (Base 15 deg)
+ * - 'm' or 'b' : Test Pick & Place -> Mid Bucket / Blue-Purple-White (Base 55 deg)
+ * - 'l' or 'g' : Test Pick & Place -> Left Bucket / Green-Yellow-Cyan (Base 100 deg)
+ * - 'r'        : Test Pick & Place -> Right Bucket / Red-Orange-Magenta (Base 15 deg)
  * - 'd'        : Test dipping down to PICKUP_POSE (Base 140 deg) and back to BASE_POSE
  * - 'p' or 'h' : Return smoothly to BASE_POSE (Base 145 deg, Gripper 180 deg)
  * - 's'        : Pause / Resume automatic ultrasonic + color sorting
@@ -35,6 +41,7 @@
 
 #include <Wire.h>
 #include <Servo.h>
+#include <math.h>
 
 // ============================================================================
 // 1. HARDWARE PINS, CALIBRATED POSES, & SENSOR CONSTANTS
@@ -98,15 +105,22 @@ const uint8_t TCS34725_ENABLE_AEN  = 0x02;
 const uint8_t TCS34725_ATIME_50MS  = 0xEB;
 const uint8_t TCS34725_GAIN_4X     = 0x01;
 
-const uint16_t COLOR_MIN_CLEAR     = 50;
-const int COLOR_MIN_SPREAD         = 6;
+const uint16_t COLOR_MIN_CLEAR       = 50;
+const int COLOR_MIN_SPREAD           = 6;
+const uint16_t COLOR_WHITE_MIN_CLEAR = 450;  // High-reflectance white threshold when chromatic spread < COLOR_MIN_SPREAD
 
-// --- Color Classification Types ---
+// --- Color Classification Types (All 9 Detectable TCS34725 Colors + None) ---
 enum ObjectColor {
   COLOR_NONE = 0,
-  COLOR_BLUE,
+  COLOR_RED,
+  COLOR_ORANGE,
+  COLOR_YELLOW,
   COLOR_GREEN,
-  COLOR_RED
+  COLOR_CYAN,
+  COLOR_BLUE,
+  COLOR_PURPLE,
+  COLOR_MAGENTA,
+  COLOR_WHITE
 };
 
 struct ColorReading {
@@ -117,6 +131,8 @@ struct ColorReading {
   int red;
   int green;
   int blue;
+  float hueDeg;       // Hue in degrees [0.0, 360.0)
+  int saturationPct;  // Saturation percentage [0, 100]
 };
 
 // --- Servo Objects & Live Tracked Angles ---
@@ -126,7 +142,9 @@ int currentAngles[NUM_SERVOS] = { 145, 145, 0, 100, 35, 180 };
 // Explicit prototypes for functions using custom types
 ColorReading readColors();
 ColorReading readColorsAveraged(uint8_t sampleCount);
+void computeHsv(ColorReading& r);
 ObjectColor detectColor(const ColorReading& reading);
+const char* getColorName(ObjectColor color);
 void printColorReading(const ColorReading& reading);
 
 
@@ -231,6 +249,7 @@ ColorReading readColors() {
   }
 
   delay(55);
+  computeHsv(reading);
   return reading;
 }
 
@@ -268,9 +287,53 @@ ColorReading readColorsAveraged(uint8_t sampleCount) {
     avg.blue  = 0;
   }
 
+  computeHsv(avg);
   return avg;
 }
 
+/**
+ * @brief Converts normalized RGB channels [0..255] into HSV hue (0..360 deg)
+ *        and saturation percentage (0..100%).
+ */
+void computeHsv(ColorReading& r) {
+  float rf = r.red / 255.0f;
+  float gf = r.green / 255.0f;
+  float bf = r.blue / 255.0f;
+
+  float cmax = max(rf, max(gf, bf));
+  float cmin = min(rf, min(gf, bf));
+  float delta = cmax - cmin;
+
+  float h = 0.0f;
+  if (delta > 0.0f) {
+    if (cmax == rf) {
+      h = 60.0f * fmod((gf - bf) / delta, 6.0f);
+      if (h < 0.0f) {
+        h += 360.0f;
+      }
+    } else if (cmax == gf) {
+      h = 60.0f * (((bf - rf) / delta) + 2.0f);
+    } else {
+      h = 60.0f * (((rf - gf) / delta) + 4.0f);
+    }
+
+    if (h < 0.0f) {
+      h += 360.0f;
+    }
+    if (h >= 360.0f) {
+      h -= 360.0f;
+    }
+  }
+
+  float s = (cmax > 0.0f) ? (delta / cmax) : 0.0f;
+  r.hueDeg = h;
+  r.saturationPct = constrain(static_cast<int>(s * 100.0f + 0.5f), 0, 100);
+}
+
+/**
+ * @brief Classifies a TCS34725 reading into all 9 detectable colors (plus COLOR_NONE)
+ *        using clear-channel thresholds, RGB spread, and HSV hue ranges.
+ */
 ObjectColor detectColor(const ColorReading& reading) {
   if (reading.rawClear < COLOR_MIN_CLEAR) {
     return COLOR_NONE;
@@ -279,16 +342,51 @@ ObjectColor detectColor(const ColorReading& reading) {
   int maxCh = max(reading.red, max(reading.green, reading.blue));
   int minCh = min(reading.red, min(reading.green, reading.blue));
   if ((maxCh - minCh) < COLOR_MIN_SPREAD) {
-    return COLOR_NONE;
+    return (reading.rawClear >= COLOR_WHITE_MIN_CLEAR) ? COLOR_WHITE : COLOR_NONE;
   }
 
-  if (reading.blue >= reading.red && reading.blue >= reading.green) {
-    return COLOR_BLUE;
+  float h = reading.hueDeg;
+  if (h < 18.0f || h >= 340.0f) {
+    return COLOR_RED;
   }
-  if (reading.green >= reading.red && reading.green >= reading.blue) {
+  if (h < 42.0f) {
+    return COLOR_ORANGE;
+  }
+  if (h < 72.0f) {
+    return COLOR_YELLOW;
+  }
+  if (h < 160.0f) {
     return COLOR_GREEN;
   }
-  return COLOR_RED;
+  if (h < 200.0f) {
+    return COLOR_CYAN;
+  }
+  if (h < 255.0f) {
+    return COLOR_BLUE;
+  }
+  if (h < 295.0f) {
+    return COLOR_PURPLE;
+  }
+  return COLOR_MAGENTA;
+}
+
+/**
+ * @brief Returns the human-readable uppercase label for an ObjectColor value.
+ */
+const char* getColorName(ObjectColor color) {
+  switch (color) {
+    case COLOR_RED:     return "RED";
+    case COLOR_ORANGE:  return "ORANGE";
+    case COLOR_YELLOW:  return "YELLOW";
+    case COLOR_GREEN:   return "GREEN";
+    case COLOR_CYAN:    return "CYAN";
+    case COLOR_BLUE:    return "BLUE";
+    case COLOR_PURPLE:  return "PURPLE";
+    case COLOR_MAGENTA: return "MAGENTA";
+    case COLOR_WHITE:   return "WHITE";
+    case COLOR_NONE:
+    default:            return "NONE";
+  }
 }
 
 void printColorReading(const ColorReading& reading) {
@@ -299,7 +397,13 @@ void printColorReading(const ColorReading& reading) {
   Serial.print("  B= ");
   Serial.print(reading.blue);
   Serial.print("  C= ");
-  Serial.println(reading.rawClear);
+  Serial.print(reading.rawClear);
+  Serial.print("  H= ");
+  Serial.print(reading.hueDeg, 1);
+  Serial.print(" deg  S= ");
+  Serial.print(reading.saturationPct);
+  Serial.print("% -> ");
+  Serial.println(getColorName(detectColor(reading)));
 }
 
 
@@ -520,26 +624,53 @@ void loop() {
     return;
   }
 
-  // 3. Analyze object color with TCS34725 and sort into calibrated bucket pose
+  // 3. Analyze object color with TCS34725 (9-color RGB + HSV) and sort into calibrated bucket pose
   ColorReading rgb = readColorsAveraged(3);
   printColorReading(rgb);
 
   switch (detectColor(rgb)) {
-    case COLOR_BLUE:
-      executePickAndPlace(MID_BUCKET_POSE, "BLUE -> MID BUCKET");
-      break;
-
-    case COLOR_GREEN:
-      executePickAndPlace(LEFT_BUCKET_POSE, "GREEN -> LEFT BUCKET");
-      break;
-
+    // Red / Warm Family -> Right Bucket (Base 15 deg)
     case COLOR_RED:
       executePickAndPlace(RIGHT_BUCKET_POSE, "RED -> RIGHT BUCKET");
       break;
 
+    case COLOR_ORANGE:
+      executePickAndPlace(RIGHT_BUCKET_POSE, "ORANGE -> RIGHT BUCKET");
+      break;
+
+    case COLOR_MAGENTA:
+      executePickAndPlace(RIGHT_BUCKET_POSE, "MAGENTA -> RIGHT BUCKET");
+      break;
+
+    // Green / Yellow / Cyan Family -> Left Bucket (Base 100 deg)
+    case COLOR_GREEN:
+      executePickAndPlace(LEFT_BUCKET_POSE, "GREEN -> LEFT BUCKET");
+      break;
+
+    case COLOR_YELLOW:
+      executePickAndPlace(LEFT_BUCKET_POSE, "YELLOW -> LEFT BUCKET");
+      break;
+
+    case COLOR_CYAN:
+      executePickAndPlace(LEFT_BUCKET_POSE, "CYAN -> LEFT BUCKET");
+      break;
+
+    // Blue / Purple / White Family -> Mid Bucket (Base 55 deg)
+    case COLOR_BLUE:
+      executePickAndPlace(MID_BUCKET_POSE, "BLUE -> MID BUCKET");
+      break;
+
+    case COLOR_PURPLE:
+      executePickAndPlace(MID_BUCKET_POSE, "PURPLE -> MID BUCKET");
+      break;
+
+    case COLOR_WHITE:
+      executePickAndPlace(MID_BUCKET_POSE, "WHITE -> MID BUCKET");
+      break;
+
     case COLOR_NONE:
     default:
-      Serial.println(">>> Color not recognized (neutral/dark) - waiting...");
+      Serial.println(">>> Color not recognized (dark or low-reflectance gray) - waiting...");
       delay(200);
       break;
   }
