@@ -29,12 +29,13 @@ As shown in the Fritzing wiring diagram ([`Schematics.png`](Schematics.png)):
 | **Ultrasonic Sensor** | HC-SR04 `Trig` | `D8` | `10 µs` trigger pulse |
 | **RGB Color Sensor** | TCS34725 `SDA` (I2C) | `A4` | `Adafruit_TCS34725` library (`50 ms` integration, `4x` gain, onboard LED enabled via `setInterrupt(false)`) |
 | **RGB Color Sensor** | TCS34725 `SCL` (I2C) | `A5` | Fast single-sample `50 ms` read, IR offset removal, calibrated post-IR RGB gains (`rGain = 0.89`, `gGain = 0.84`, `bGain = 1.45`), two-point `whiteChRef = 520.0f` / `blackChRef` (`0–255` luminance scaling), `PROGMEM` lookup (`WHITE_SHADES`, `BLACK_SHADES`, `RGB_RANGE_CATEGORIES`), HSV Hue (`0°–360°`, `0–359 deg`) & Saturation (`0%–100%`), `topGapPct`, classifies `WHITE`, `BLACK`, `RED`, `GREEN`, `BLUE`, `COLOR` (`COLOR_OTHER`), `WALANG OBJECT` (enum also defines `COLOR_NONE`) |
-| **Servo 1** | Base Rotation (`servos[0]`) | `D9` | Swings arm between pickup (`140°`–`160°`) and sorting buckets (`15°`–`100°`) |
-| **Servo 2** | Shoulder (`servos[1]`) | `D5` | Vertical arm elevation and reach (`120°` pickup, `135°`–`175°` standby/buckets) |
-| **Servo 3** | Elbow (`servos[2]`) | `D10` | Forearm extension (`25°` transit/standby, `40°` pickup dip, `5°`–`30°` buckets) |
-| **Servo 4** | Wrist Pitch (`servos[3]`) | `D6` | End-effector pitch angle (`45°` pickup, `35°`–`65°` standby/buckets) |
-| **Servo 5** | Wrist Roll (`servos[4]`) | `D11` | End-effector roll orientation (`55°` at `BASE_POSE`, `40°` at `PICKUP_POSE`, `35°` at bucket poses) |
+| **Servo 1** | Base Rotation (`servos[0]`) | `D9` | Swings arm between pickup (`140°`–`160°`) and sorting buckets (`10°`–`95°`) |
+| **Servo 2** | Shoulder (`servos[1]`) | `D5` | Vertical arm elevation and reach (`120°` pickup, `135°` Left/Right buckets, `160°` Mid bucket, `175°` standby/clearance) |
+| **Servo 3** | Elbow (`servos[2]`) | `D10` | Forearm extension (`25°` standby/clearance & Mid bucket, `40°` pickup dip, `15°` Left/Right buckets) |
+| **Servo 4** | Wrist Pitch (`servos[3]`) | `D6` | End-effector pitch angle (`45°` pickup & Left/Right buckets, `65°` standby/clearance & Mid bucket) |
+| **Servo 5** | Wrist Roll (`servos[4]`) | `D11` | End-effector roll orientation (`55°` at `BASE_POSE` and bucket poses, `40°` at `PICKUP_POSE`) |
 | **Servo 6** | Gripper Claw (`servos[5]`) | `D3` | `20°` Open (`GRIP_FULL_OPEN` / `GRIP_OPEN_ANGLE`) / `180°` Closed (`GRIP_FULL_CLOSE` / `GRIP_CLOSE_ANGLE`) |
+| **Speed Mode Switch** | 2-Pin Toggle / Slide Switch | `D12` | `INPUT_PULLUP` to `GND` (`35 ms` debounce): **ON (`LOW`)** = **MAX SPEED** all 6 servos (`2 ms/deg`, zero easing, `1 ms/deg` gripper); **OFF (`HIGH`)** = **NORMAL** smooth speed (`10 ms/deg` + easing + neat drop) |
 
 - **MG996R Servo PWM Pulse Limits**: All 6 servos (`servoNames[0..5]`) are attached with `MG996R_MIN_US = 600` (`600 µs`) and `MG996R_MAX_US = 2400` (`2400 µs`) via `servos[i].attach(servoPins[i], MG996R_MIN_US, MG996R_MAX_US)` for full `0°–180°` travel.
 
@@ -48,9 +49,9 @@ All poses follow the joint order `{ Base (D9), Shoulder (D5), Elbow (D10), Wrist
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 | `BASE_POSE` | Base Hover / Standby | `160` | `175` | `25` | `65` | `55` | `180` | `{ 160, 175, 25, 65, 55, 180 }` |
 | `PICKUP_POSE` | Pickup Location Grab Pose | `140` | `120` | `40` | `45` | `40` | `20` | `{ 140, 120, 40, 45, 40, 20 }` |
-| `MID_BUCKET_POSE` | Mid Bucket → **White Only** | `60` | `150` | `25` | `60` | `35` | `180` | `{ 60, 150, 25, 60, 35, 180 }` |
-| `LEFT_BUCKET_POSE` | Left Bucket → **Black** | `100` | `150` | `30` | `35` | `35` | `180` | `{ 100, 150, 30, 35, 35, 180 }` |
-| `RIGHT_BUCKET_POSE` | Right Bucket → **All Colors (Red, Green, Blue, etc.)** | `15` | `135` | `5` | `60` | `35` | `180` | `{ 15, 135, 5, 60, 35, 180 }` |
+| `MID_BUCKET_POSE` | Mid Bucket → **White Only** | `50` | `160` | `25` | `65` | `55` | `180` | `{ 50, 160, 25, 65, 55, 180 }` |
+| `LEFT_BUCKET_POSE` | Left Bucket → **Black** | `95` | `135` | `15` | `45` | `55` | `180` | `{ 95, 135, 15, 45, 55, 180 }` |
+| `RIGHT_BUCKET_POSE` | Right Bucket → **All Colors (Red, Green, Blue, etc.)** | `10` | `135` | `15` | `45` | `55` | `180` | `{ 10, 135, 15, 45, 55, 180 }` |
 
 - **High-Clearance Upper-Arm Transit Posture**: `{ Shoulder, Elbow, Wrist Pitch, Wrist Roll } = { 175, 25, 65, 55 }` — lifted prior to any `Base (D9)` rotation so the gripper clears the pickup housing and sorting bins.
 
@@ -74,9 +75,9 @@ The complete mechanical layout and printable parts are provided in [`3d Model.st
 - **Angled Sensor Mount**: `X = 108 mm`, angled at `-42°` overlooking the pickup window (`TCS34725` at `[108, -1, 40.675]`, `HC-SR04` at `[108, 31, 40.675]`)
 - **Pickup Basket**: `(75, 15, 3.175)` mm with sensor window (`74 x 74 x 36 mm`) + inverted stand at `(148, 15, 3.175)` mm → **`PICKUP_POSE`** (`Base = 140°`)
 - **Front-Row Sorting Baskets** (OpenSCAD `Y = -85 mm`, `36 mm` height):
-  - **Left Basket (Black)** (`Black` container): Board `(-115, -85, 3.175)` mm → **`LEFT_BUCKET_POSE`** (`Base = 100°`)
-  - **Mid Basket (White Only)** (`WhiteSmoke` container): Board `(-35, -85, 3.175)` mm → **`MID_BUCKET_POSE`** (`Base = 60°`)
-  - **Right Basket (All Colors — Red, Green, Blue, etc.)** (`RoyalBlue` container): Board `(45, -85, 3.175)` mm → **`RIGHT_BUCKET_POSE`** (`Base = 15°`)
+  - **Left Basket (Black)** (`Black` container): Board `(-115, -85, 3.175)` mm → **`LEFT_BUCKET_POSE`** (`Base = 95°`)
+  - **Mid Basket (White Only)** (`WhiteSmoke` container): Board `(-35, -85, 3.175)` mm → **`MID_BUCKET_POSE`** (`Base = 50°`)
+  - **Right Basket (All Colors — Red, Green, Blue, etc.)** (`RoyalBlue` container): Board `(45, -85, 3.175)` mm → **`RIGHT_BUCKET_POSE`** (`Base = 10°`)
 
 ### Reference Tested Object Specifications
 - **Blue object**: `32 g`, `3.1 cm x 3.4 cm x 5.1 cm`
@@ -90,9 +91,9 @@ The complete mechanical layout and printable parts are provided in [`3d Model.st
 The firmware in [`Pick_and_Place_Color_Sorting_Object_RobotArm.ino`](Pick_and_Place_Color_Sorting_Object_RobotArm.ino) is self-contained and operates in the following sequence:
 
 ### 1. Staggered Startup (`setup()`)
-- Starts `Serial` at `9600` baud, prints the startup banner, configures HC-SR04 trigger/echo pins (`D8`/`D7`), and initializes the `Adafruit_TCS34725` sensor (`50 ms` integration time, `4x` gain, onboard LED enabled via `tcs.setInterrupt(false)`).
+- Starts `Serial` at `9600` baud (with `500 ms` rail stabilization), initializes the **Pin 12 hardware speed switch** (`initSpeedSwitch()`, `INPUT_PULLUP` active-LOW to `GND`), configures HC-SR04 trigger/echo pins (`D8`/`D7`), and initializes the `Adafruit_TCS34725` sensor (`50 ms` integration time, `4x` gain, onboard LED enabled via `tcs.setInterrupt(false)`).
 - Attaches all 6 servos one-by-one with a **`600 ms` delay** between each servo using MG996R pulse limits (`MG996R_MIN_US = 600` to `MG996R_MAX_US = 2400` via `servos[i].attach(servoPins[i], MG996R_MIN_US, MG996R_MAX_US)`), pre-positioning every joint directly to **`BASE_POSE`** (`{ 160, 175, 25, 65, 55, 180 }`) to prevent power-rail brownouts.
-- Prints the organized command reference (`printHelpMenu()`) and initial joint angles (`printAllAngles()`) before entering `loop()`.
+- Prints `[BOOT DIAGNOSTIC]` (Pin 12 switch state, `TCS34725` status, `HC-SR04` distance), the organized command reference (`printHelpMenu()`), and initial joint angles (`printAllAngles()`) before entering `loop()`.
 
 ### 2. Object Detection & Color Sensing (`loop()`)
 - **Ultrasonic Range Gating & 2-Hit Stability Filter (`HC-SR04`)**: Every `30 ms` (while `isRunning` is active; paused automatically if `gripperLoopRunning` is enabled), `readDistanceCM()` measures distance using a `15000 µs` / `15 ms` timeout (`ECHO_TIMEOUT_US`), returning `-1` on timeout or `(duration * 0.0343) / 2.0` in centimeters. Only objects within `MIN_RANGE = 2.0 cm` to `MAX_RANGE = 5.5 cm` (below the `7.1 cm` opposite wall of the pickup basket) increment `hitCount`, resetting `hitCount = 0` whenever the reading is out of range.
@@ -108,9 +109,9 @@ The firmware in [`Pick_and_Place_Color_Sorting_Object_RobotArm.ino`](Pick_and_Pl
     - **Empty (`printColorTelemetry()`)**: `rgb(0, 0, 0) (#000000) | Hue: 0 deg | Sat: 0% | C: <clear> -> WALANG OBJECT`
     - **Chromatic Colors (`printColorTelemetry()`)**: `rgb(R, G, B) (hex #RRGGBB) | Hue: <deg> deg | Sat: <pct>% | C: <clear> -> <LABEL>` (`RED [RIGHT BUCKET]`, `GREEN [RIGHT BUCKET]`, `BLUE [RIGHT BUCKET]`, or `COLOR [RIGHT BUCKET]`)
   - **Settle & Bucket-Level Majority Confirmation**: After **`25 ms`** (`SETTLE_DELAY_MS`), `loop()` re-checks ultrasonic presence via `isObjectInRangeWithRetry()` (resetting `hitCount = 0` and returning immediately if gone), takes a second reading `confirmed = readAndDetectColor(true)` (`secondC = LastClear`), and compares target buckets via `getTargetBucket()` (`1` = White, `2` = Black, `3` = All Colors, `0` = None) so e.g. `RED` and `COLOR` agree immediately on Right Bucket without extra delay. Only if `bucket1 != bucket2`, it waits **`20 ms`** for a 3rd tie-breaker `tieBreaker = readAndDetectColor(true)` (`thirdC = LastClear`, `bucket3`) and resolves by bucket majority (or prefers `bucket3 == 3` chromatic, `COLOR_WHITE` when `secondC`/`thirdC >= whiteMinC`, or `bucket3 != 0`; if `getTargetBucket(confirmed) == 0 && bucket1 != 0`, it retains `firstRead`). On a valid color, it resets `hitCount = 0` and executes `executePickAndPlace()`:
-    - **Mid Bucket (`MID_BUCKET_POSE`, Base `60°`) — White Only**: `COLOR_WHITE` (`WHITE [MID BUCKET]`)
-    - **Left Bucket (`LEFT_BUCKET_POSE`, Base `100°`) — Black**: `COLOR_BLACK` (`BLACK [LEFT BUCKET]`)
-    - **Right Bucket (`RIGHT_BUCKET_POSE`, Base `15°`) — All Colors**: `COLOR_RED` (`RED`), `COLOR_GREEN` (`GREEN`), `COLOR_BLUE` (`BLUE`), and `COLOR_OTHER` (`COLOR` for Yellow, Orange, Purple, Pink, etc.)
+    - **Mid Bucket (`MID_BUCKET_POSE`, Base `50°`) — White Only**: `COLOR_WHITE` (`WHITE [MID BUCKET]`)
+    - **Left Bucket (`LEFT_BUCKET_POSE`, Base `95°`) — Black**: `COLOR_BLACK` (`BLACK [LEFT BUCKET]`)
+    - **Right Bucket (`RIGHT_BUCKET_POSE`, Base `10°`) — All Colors**: `COLOR_RED` (`RED`), `COLOR_GREEN` (`GREEN`), `COLOR_BLUE` (`BLUE`), and `COLOR_OTHER` (`COLOR` for Yellow, Orange, Purple, Pink, etc.)
     - **Ignored (`COLOR_NO_OBJECT`, `COLOR_NONE`)**: `WALANG OBJECT` (`(!objectDetected && c < NO_OBJECT_MAX_C)` with `NO_OBJECT_MAX_C = 42`, or `c < 8.0`) or `COLOR_NONE` — waits without picking up.
 
 ### TCS34725 Color Classification & Bucket Routing
@@ -118,12 +119,12 @@ The firmware in [`Pick_and_Place_Color_Sorting_Object_RobotArm.ino`](Pick_and_Pl
 | Enum Value | Serial Label | Classification Criteria (Evaluated in Strict Order) | Target Bucket Pose | Base Angle |
 | :--- | :--- | :--- | :--- | :--- |
 | `COLOR_NO_OBJECT` | `WALANG OBJECT` | `!objectDetected && (c < NO_OBJECT_MAX_C || c < 8.0)` (`42`, uses ultrasonic check when `objectDetected` is `false` — never drops ultrasonic-confirmed dark/pitch-black objects); prints `rgb(0, 0, 0) (#000000)` with `Hue: 0 deg` and `Sat: 0%` | *Ignored* | Remains at `BASE_POSE` |
-| `COLOR_BLACK` | `BLACK [LEFT BUCKET]` | `isPitchBlack` (`c < blackSolidMaxC` (`40`) or `calMax <= 18`), or `(!isClearlyChromatic && c < blackMaxC && satPct < DARK_COLOR_MIN_SAT_PCT)` (`blackMaxC = 850` default, auto-scaled by `'w'` / `'z'`, `DARK_COLOR_MIN_SAT_PCT = 32%`), or `(c < whiteMinC && isBlackShade)` where `inBlackCategory = (catIdx >= 12 && catIdx <= 14)` (`Dark Gray`, `Charcoal`, `Black`) and `isBlackShade = isPitchBlack || (!isClearlyChromatic && ((calMax <= 55) || (inBlackCategory && satPct <= 35)))`; or achromatic fallback (`c < achromaticMidC`); sets `Red = calR`, `Green = calG`, `Blue = calB`, `LastHue = 0` and appends `\| Cat: <category> \| Shade: <shade name>` from `BLACK_SHADES` | `LEFT_BUCKET_POSE` | **Left Bucket — Black** (`100°`) |
-| `COLOR_WHITE` | `WHITE [MID BUCKET]` | `!isClearlyChromatic && c >= whiteMinC` (`1020` default, auto-scaled by `'w'` / `'z'`) and (`(inWhiteCategory && satPct <= 28 && topGapPct <= 18)` where `inWhiteCategory = (catIdx >= 0 && catIdx <= 10)` (`Pure White`..`Light Gray`), or `(satPct <= WHITE_MAX_SAT_PCT && topGapPct <= WHITE_MAX_TOPGAP_PCT)` (`26%`, `17%`), or `(c >= whiteBrightMinC && satPct <= WHITE_BRIGHT_MAX_SAT_PCT && topGapPct <= 18)` (`1320`, `30%`), or `(satPct <= 22)`); or achromatic fallback (`c >= achromaticMidC`); sets `Red = calR`, `Green = calG`, `Blue = calB`, `LastHue = 0` and appends `\| Cat: <category> \| Shade: <shade name>` from `WHITE_SHADES` | `MID_BUCKET_POSE` | **Mid Bucket — White Only** (`60°`) |
-| `COLOR_RED` | `RED [RIGHT BUCKET]` | Chromatic (`satPct >= COLOR_MIN_SAT_PCT` (`22%`) or `topGapPct >= 14%`) and Hue `330°–25°` (`hueDeg >= 330` or `hueDeg <= 25`), or Red-max (`r_bal == maxCh`) up to `32°` with `topGapPct >= 12%`; prints `rgb(R, G, B) (hex #RRGGBB)` | `RIGHT_BUCKET_POSE` | **Right Bucket — All Colors** (`15°`) |
-| `COLOR_GREEN` | `GREEN [RIGHT BUCKET]` | Chromatic (`satPct >= 22%` or `topGapPct >= 14%`) and Hue `70°–168°`; prints `rgb(R, G, B) (hex #RRGGBB)` | `RIGHT_BUCKET_POSE` | **Right Bucket — All Colors** (`15°`) |
-| `COLOR_BLUE` | `BLUE [RIGHT BUCKET]` | Chromatic (`satPct >= 22%` or `topGapPct >= 14%`) and Hue `170°–265°`; prints `rgb(R, G, B) (hex #RRGGBB)` | `RIGHT_BUCKET_POSE` | **Right Bucket — All Colors** (`15°`) |
-| `COLOR_OTHER` | `COLOR [RIGHT BUCKET]` | Chromatic (`satPct >= 22%` or `topGapPct >= 14%`) outside R/G/B bands (`26°–69°` Yellow/Orange, `266°–329°` Purple/Magenta/Pink, plus `169°`); prints `rgb(R, G, B) (hex #RRGGBB)` | `RIGHT_BUCKET_POSE` | **Right Bucket — All Colors** (`15°`) |
+| `COLOR_BLACK` | `BLACK [LEFT BUCKET]` | `isPitchBlack` (`c < blackSolidMaxC` (`40`) or `calMax <= 18`), or `(!isClearlyChromatic && c < blackMaxC && satPct < DARK_COLOR_MIN_SAT_PCT)` (`blackMaxC = 850` default, auto-scaled by `'w'` / `'z'`, `DARK_COLOR_MIN_SAT_PCT = 32%`), or `(c < whiteMinC && isBlackShade)` where `inBlackCategory = (catIdx >= 12 && catIdx <= 14)` (`Dark Gray`, `Charcoal`, `Black`) and `isBlackShade = isPitchBlack || (!isClearlyChromatic && ((calMax <= 55) || (inBlackCategory && satPct <= 35)))`; or achromatic fallback (`c < achromaticMidC`); sets `Red = calR`, `Green = calG`, `Blue = calB`, `LastHue = 0` and appends `\| Cat: <category> \| Shade: <shade name>` from `BLACK_SHADES` | `LEFT_BUCKET_POSE` | **Left Bucket — Black** (`95°`) |
+| `COLOR_WHITE` | `WHITE [MID BUCKET]` | `!isClearlyChromatic && c >= whiteMinC` (`1020` default, auto-scaled by `'w'` / `'z'`) and (`(inWhiteCategory && satPct <= 28 && topGapPct <= 18)` where `inWhiteCategory = (catIdx >= 0 && catIdx <= 10)` (`Pure White`..`Light Gray`), or `(satPct <= WHITE_MAX_SAT_PCT && topGapPct <= WHITE_MAX_TOPGAP_PCT)` (`26%`, `17%`), or `(c >= whiteBrightMinC && satPct <= WHITE_BRIGHT_MAX_SAT_PCT && topGapPct <= 18)` (`1320`, `30%`), or `(satPct <= 22)`); or achromatic fallback (`c >= achromaticMidC`); sets `Red = calR`, `Green = calG`, `Blue = calB`, `LastHue = 0` and appends `\| Cat: <category> \| Shade: <shade name>` from `WHITE_SHADES` | `MID_BUCKET_POSE` | **Mid Bucket — White Only** (`50°`) |
+| `COLOR_RED` | `RED [RIGHT BUCKET]` | Chromatic (`satPct >= COLOR_MIN_SAT_PCT` (`22%`) or `topGapPct >= 14%`) and Hue `330°–25°` (`hueDeg >= 330` or `hueDeg <= 25`), or Red-max (`r_bal == maxCh`) up to `32°` with `topGapPct >= 12%`; prints `rgb(R, G, B) (hex #RRGGBB)` | `RIGHT_BUCKET_POSE` | **Right Bucket — All Colors** (`10°`) |
+| `COLOR_GREEN` | `GREEN [RIGHT BUCKET]` | Chromatic (`satPct >= 22%` or `topGapPct >= 14%`) and Hue `70°–168°`; prints `rgb(R, G, B) (hex #RRGGBB)` | `RIGHT_BUCKET_POSE` | **Right Bucket — All Colors** (`10°`) |
+| `COLOR_BLUE` | `BLUE [RIGHT BUCKET]` | Chromatic (`satPct >= 22%` or `topGapPct >= 14%`) and Hue `170°–265°`; prints `rgb(R, G, B) (hex #RRGGBB)` | `RIGHT_BUCKET_POSE` | **Right Bucket — All Colors** (`10°`) |
+| `COLOR_OTHER` | `COLOR [RIGHT BUCKET]` | Chromatic (`satPct >= 22%` or `topGapPct >= 14%`) outside R/G/B bands (`26°–69°` Yellow/Orange, `266°–329°` Purple/Magenta/Pink, plus `169°`); prints `rgb(R, G, B) (hex #RRGGBB)` | `RIGHT_BUCKET_POSE` | **Right Bucket — All Colors** (`10°`) |
 | `COLOR_NONE` | `NONE` | Enum sentinel ignored in `loop()` (achromatic fallback routes neutral readings to `WHITE` when `c >= achromaticMidC` or `BLACK` when `c < achromaticMidC`) | *Ignored* | Remains at `BASE_POSE` |
 
 ### `PROGMEM` White/Black Shade & TCS34725 RGB Category Tables
@@ -182,12 +183,15 @@ Matched by `findNearestShadeIndex(Red, Green, Blue, BLACK_SHADES, NUM_BLACK_SHAD
 | `8` | `Matte Black` | `28, 28, 28` | `16` | `Black Olive` | `59, 60, 54` | `24` | `Cool Black` | `17, 24, 32` |
 
 ### 3. 5-Stage Clearance-Safe Pick-and-Place Trajectory (`executePickAndPlace()`)
-All joint transitions interpolate smoothly at **`1°` per step** (`2 ms/deg` MG996R max-speed default via `'n'`, `1 ms/deg` max turbo via `'f'`, with a `90 ms` physical Base-arrival guard whenever `stepDelayMs <= 2` and Base sweeps `>= 50°`), lifting the upper arm to the clearance posture `{ 175, 25, 65, 55 }` before any `Base (D9)` rotation:
+All joint transitions interpolate at **`1°` per step** and poll `updateSpeedSwitch()` live so flipping the **Pin 12 Speed Switch** takes effect immediately across all 6 servos:
+- **Pin 12 Switch OFF (`HIGH` — Normal Mode)**: Smooth **`10 ms/deg`** (`normalStepDelayMs`, `'n'`, or `6 ms/deg` via `'f'`) with **soft-start / soft-stop easing** (`+4 ms` on the first and last `8°` of travel), `120 ms` Base-arrival settle pause, `200 ms` pickup settle, `250 ms` bucket settle, and controlled **`4 ms/deg` + `350 ms`** neat drop.
+- **Pin 12 Switch ON (`LOW` to `GND` — MAX SPEED Mode)**: Drives **all 6 servos at `2 ms/deg`** (`MAX_STEP_DELAY_MS`) with zero easing (`easeMs = 0`), **`1 ms/deg`** gripper actuation, and reduced settle dwells (`25–120 ms`), automatically returning to smooth Normal speed when switched back OFF.
+All cycles lift the upper arm to the clearance posture `{ 175, 25, 65, 55 }` before any `Base (D9)` rotation:
 
-1. **Stage 1 — Standby, Open & Dip**: Ensures the arm is at `BASE_POSE` (`{ 160, 175, 25, 65, 55, 180 }`), opens Gripper (`D3`) to `20°` (`GRIP_FULL_OPEN`), and moves smoothly via `moveToPoseSmooth(PICKUP_POSE)` to `{ 140, 120, 40, 45, 40 }`.
-2. **Stage 2 — Grab & Lift**: Closes Gripper (`D3`) to `180°` (`GRIP_FULL_CLOSE`) to secure the object, then lifts smoothly back to `BASE_POSE` (`{ 160, 175, 25, 65, 55, 180 }`) while holding Gripper closed (`180°`).
-3. **Stage 3 — Clearance Transit to Bucket**: Rotates `Base (D9)` at high-clearance posture `{ 175, 25, 65, 55 }` to the target bucket angle (`60°`, `100°`, or `15°`), then moves `{ Shoulder, Elbow, Wrist Pitch, Wrist Roll }` smoothly into the target bucket pose while holding Gripper at `180°`.
-4. **Stage 4 — Release**: Opens Gripper (`D3`) to `20°` (`GRIP_FULL_OPEN`) to drop the object into the bucket.
+1. **Stage 1 — Standby, Open & Dip**: Ensures the arm is at `BASE_POSE` (`{ 160, 175, 25, 65, 55, 180 }`), smoothly opens Gripper (`D3`) to `20°` (`GRIP_FULL_OPEN` at `3 ms/deg` via `setGripper()`), moves smoothly via `moveToPoseSmooth(PICKUP_POSE)` to `{ 140, 120, 40, 45, 40 }`, and settles `200 ms` over the object.
+2. **Stage 2 — Grab & Lift**: Smoothly closes Gripper (`D3`) to `180°` (`GRIP_FULL_CLOSE` at `3 ms/deg`, holding `300 ms`) to secure the object, then lifts smoothly back to `BASE_POSE` (`{ 160, 175, 25, 65, 55, 180 }`) while holding Gripper closed (`180°`).
+3. **Stage 3 — Clearance Transit to Bucket**: Rotates `Base (D9)` at high-clearance posture `{ 175, 25, 65, 55 }` to the target bucket angle (`50°`, `95°`, or `10°`), lowers `{ Shoulder, Elbow, Wrist Pitch, Wrist Roll }` smoothly into the target bucket pose while holding Gripper at `180°`, and settles `250 ms` above the bucket.
+4. **Stage 4 — Controlled Neat Drop**: Gently opens Gripper (`D3`) to `20°` (`GRIP_FULL_OPEN` at `4 ms/deg`, holding `350 ms`) so the object drops cleanly straight into the bucket without flinging or bouncing.
 5. **Stage 5 — Retract & Return**: Lifts the upper arm smoothly back to clearance `{ 175, 25, 65, 55 }`, rotates `Base (D9)` back to `160°`, and restores `BASE_POSE` (`{ 160, 175, 25, 65, 55, 180 }`).
 
 ---
@@ -199,14 +203,14 @@ Open the Arduino IDE **Serial Monitor** at `9600` baud (handled by `handleSerial
 ### Organized Serial Monitor Layout (`printHelpMenu()`, `printAllAngles()`)
 - **`printHelpMenu()`**: Displays the formatted `COMMAND MENU` grouped into `[LIVE ANGLE ADJUSTER]`, `[PRESET POSES & SORTING TESTS]`, and `[COLOR SENSOR & SYSTEM]` (automatically shown on startup and via `'?'`).
 - **`printAllAngles()`**: Prints the `CURRENT ANGLES` summary block containing a ready-to-copy `int POSE[6] = { a0, a1, a2, a3, a4, a5 };` array and all 6 joints (`servoNames[0..5]`), marking the active `selectedServo` with ` -> `.
-- **`moveServoSmooth()`**: Steps individual live adjustments smoothly at `1°` per `2 ms` and prints `>> [<servoNames[idx]>] = <angle> deg`.
+- **`moveServoSmooth()`**: Steps individual live adjustments smoothly at `1°` per `10 ms` normal (or `2 ms` when the Pin 12 Speed Switch is ON) and prints `>> [<servoNames[idx]>] = <angle> deg`.
 
 ### `[LIVE ANGLE ADJUSTER]`
 
 | Command | Action | Target / Effect |
 | :--- | :--- | :--- |
 | `'1'`..`'6'` | Select live servo | Selects joint `1..6` (`selectedServo = 0..5`: Base..Gripper Claw) and prints `Napili: <name> (Current = <deg> deg)` |
-| `'+'` / `'-'` | Smooth step ±5° | Moves `selectedServo` by `+5°` or `-5°` smoothly (`2 ms/deg` via `moveServoSmooth()`, clamped `0°–180°`) |
+| `'+'` / `'-'` | Smooth step ±5° | Moves `selectedServo` by `+5°` or `-5°` (`10 ms/deg` normal / `2 ms/deg` Pin 12 ON via `moveServoSmooth()`, clamped `0°–180°`) |
 | `'s1 <ang>'`..`'s6 <ang>'` | Direct servo angle | Selects servo `1..6` and moves smoothly to `<ang>` (`0°–180°`, e.g., `s2 105`; case-insensitive) |
 | `'o'` | Open gripper | Moves Gripper (`servos[5]`) smoothly to `GRIP_OPEN_ANGLE` (`20°`) |
 | `'x'` | Close gripper | Moves Gripper (`servos[5]`) smoothly to `GRIP_CLOSE_ANGLE` (`180°`) |
@@ -220,11 +224,11 @@ Open the Arduino IDE **Serial Monitor** at `9600` baud (handled by `handleSerial
 
 | Command | Action | Target / Effect |
 | :--- | :--- | :--- |
-| `'p1'`..`'p5'` | Move to preset pose | Moves smoothly via `moveToCalibratedPose()` to calibrated pose `1..5` and prints `CURRENT ANGLES`: `'p1'` → `BASE_POSE` (`{ 160, 175, 25, 65, 55, 180 }`), `'p2'` → `PICKUP_POSE` (`{ 140, 120, 40, 45, 40, 20 }`), `'p3'` → `MID_BUCKET_POSE` (`{ 60, 150, 25, 60, 35, 180 }`), `'p4'` → `LEFT_BUCKET_POSE` (`{ 100, 150, 30, 35, 35, 180 }`), `'p5'` → `RIGHT_BUCKET_POSE` (`{ 15, 135, 5, 60, 35, 180 }`) |
-| `'m'` | Mid Bucket test | Runs 5-stage `executePickAndPlace()` to **Mid Bucket** (`MID_BUCKET_POSE` — White Only, Base `60°`) |
-| `'l'` / `'k'` | Left Bucket test | Runs 5-stage `executePickAndPlace()` to **Left Bucket** (`LEFT_BUCKET_POSE` — Black, Base `100°`) |
-| `'r'` / `'g'` / `'b'` | Right Bucket test | Runs 5-stage `executePickAndPlace()` to **Right Bucket** (`RIGHT_BUCKET_POSE` — All Colors, Base `15°`) |
-| `'d'` | Pickup dip test | Opens claw (`20°`), dips smoothly to `PICKUP_POSE` (`{ 140, 120, 40, 45, 40, 20 }`), pauses `300 ms`, and lifts back to `BASE_POSE` |
+| `'p1'`..`'p5'` | Move to preset pose | Moves smoothly via `moveToCalibratedPose()` to calibrated pose `1..5` and prints `CURRENT ANGLES`: `'p1'` → `BASE_POSE` (`{ 160, 175, 25, 65, 55, 180 }`), `'p2'` → `PICKUP_POSE` (`{ 140, 120, 40, 45, 40, 20 }`), `'p3'` → `MID_BUCKET_POSE` (`{ 50, 160, 25, 65, 55, 180 }`), `'p4'` → `LEFT_BUCKET_POSE` (`{ 95, 135, 15, 45, 55, 180 }`), `'p5'` → `RIGHT_BUCKET_POSE` (`{ 10, 135, 15, 45, 55, 180 }`) |
+| `'m'` | Mid Bucket test | Runs 5-stage `executePickAndPlace()` to **Mid Bucket** (`MID_BUCKET_POSE` — White Only, Base `50°`) |
+| `'l'` / `'k'` | Left Bucket test | Runs 5-stage `executePickAndPlace()` to **Left Bucket** (`LEFT_BUCKET_POSE` — Black, Base `95°`) |
+| `'r'` / `'g'` / `'b'` | Right Bucket test | Runs 5-stage `executePickAndPlace()` to **Right Bucket** (`RIGHT_BUCKET_POSE` — All Colors, Base `10°`) |
+| `'d'` | Pickup dip test | Smoothly opens claw (`20°`), dips smoothly to `PICKUP_POSE` (`{ 140, 120, 40, 45, 40, 20 }`), pauses `500 ms`, and lifts back to `BASE_POSE` |
 | `'h'` | Return home | Moves smoothly back to `BASE_POSE` (`{ 160, 175, 25, 65, 55, 180 }`) |
 
 ### `[COLOR SENSOR & SYSTEM]`
@@ -234,14 +238,15 @@ Open the Arduino IDE **Serial Monitor** at `9600` baud (handled by `handleSerial
 | `'w'` | White-balance calibrate | Averages 5 white reference samples (`calibrateWhiteBalance()`, aborts if `C < NO_OBJECT_MAX_C`), balances `rGain`/`gGain`/`bGain`, sets `whiteRefC` and `whiteChRef = avg_ir` (resets `blackChRef = 0.0f` if `blackRefC` is invalidated), dynamically scales `blackSolidMaxC`, `blackMaxC`, `whiteMinC`, and `whiteBrightMinC`, and prints a fresh `readAndDetectColor(true)` reading |
 | `'z'` | Black threshold calibrate | Averages 5 black reference samples (`calibrateBlackReference()`, aborts if `C < 8` or `C >= whiteRefC - 60`), sets `blackRefC` and post-IR `blackChRef` floor (`0.65f * blackChRef`), interpolates `blackSolidMaxC`, `blackMaxC`, and `whiteMinC` cleanly between `blackRefC` and `whiteRefC`, and prints a fresh `readAndDetectColor(true)` reading |
 | `'s'` (alone) / `'a'` | Auto-sort toggle | Pauses or resumes automatic HC-SR04 + TCS34725 sorting (`toggleAutoSorting()`; turning ON also stops `gripperLoopRunning`) |
-| `'f'` | Max Turbo speed | Sets smooth trajectory delay (`stepDelayMs`) to `1 ms/deg` |
-| `'n'` | Max speed (default) | Sets smooth trajectory delay (`stepDelayMs`) to `2 ms/deg` |
+| `'f'` | Fast speed | Sets OFF-mode trajectory delay (`normalStepDelayMs`) to `6 ms/deg` (applies immediately when Pin 12 Switch is OFF, or saved until turned OFF) |
+| `'n'` | Normal speed (default) | Sets OFF-mode trajectory delay (`normalStepDelayMs`) to `10 ms/deg` (applies immediately when Pin 12 Switch is OFF, or saved until turned OFF) |
+| **Pin 12 Switch** (`D12` ↔ `GND`) | Hardware MAX SPEED toggle | **ON (`LOW` to `GND`)**: forces **ALL 6 servos** to `MAX_STEP_DELAY_MS` (`2 ms/deg`, zero easing, `1 ms/deg` gripper). **OFF (`HIGH`)**: immediately restores smooth NORMAL speed |
 
 ---
 
 ## Getting Started
 
-1. Wire the Arduino UNO R3, **6 servos**, external servo power supply, HC-SR04, and TCS34725 according to [`Schematics.png`](Schematics.png) and the pinout table above.
+1. Wire the Arduino UNO R3, **6 servos**, external servo power supply, HC-SR04, TCS34725, and the optional **Pin 12 Speed Switch** (`D12` ↔ `GND`, no resistor needed) according to [`Schematics.png`](Schematics.png) and the pinout table above.
 2. Open [`Pick_and_Place_Color_Sorting_Object_RobotArm.ino`](Pick_and_Place_Color_Sorting_Object_RobotArm.ino) in the **Arduino IDE**.
 3. Install the **Adafruit TCS34725** library from the Arduino Library Manager (built-in `Wire.h`, `Servo.h`, and `<avr/pgmspace.h>` are also used).
 4. Select **Arduino Uno** and the appropriate serial port, then click **Upload**.
