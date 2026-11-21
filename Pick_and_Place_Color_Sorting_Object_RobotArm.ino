@@ -21,7 +21,7 @@
  * IR Offset Removal, Gentle Warm-LED Compensation, and HSV Hue/Sat Telemetry):
  * - Right Bucket (Base  15 deg) : ALL COLORS (RED, GREEN, BLUE, COLOR)
  * - Left Bucket  (Base 100 deg) : BLACK
- * - Mid Bucket   (Base  60 deg) : WHITE ONLY
+ * - Mid Bucket   (Base  60 deg) : WHITE ONLY 
  * - Ignored                     : WALANG OBJECT, NONE (unmatched)
  *
  * Serial Monitor Commands (9600 baud):
@@ -113,9 +113,9 @@ const int ULTRASONIC_TRIG_PIN = 8;  // HC-SR04 Trig -> Pin 8
 const int ULTRASONIC_ECHO_PIN = 7;  // HC-SR04 Echo -> Pin 7
 
 // Detection Range (in cm)
-// Bahagyang pinalawak pero mas mababa pa rin sa 7.1 cm opposite wall
-const float MIN_RANGE = 1.5f;
-const float MAX_RANGE = 6.2f;
+// Mas mababa sa 7.1 cm para hindi ma-detect ang kabilang pader
+const float MIN_RANGE = 2.0f;
+const float MAX_RANGE = 5.5f;
 
 // Stability filter (ilang sunod-sunod na detect bago mag-trigger)
 const int REQUIRED_HITS = 2;
